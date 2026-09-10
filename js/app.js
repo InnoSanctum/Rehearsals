@@ -36,8 +36,10 @@ const state = {
   usersById: new Map(),
   me: null,
   seatsUsed: 0,
-  seatsLeft: 0,
-  availableColors: [],
+  seatsLeft: APP_CONFIG.maxUsers,
+  availableColors: APP_CONFIG.palette.slice(),
+  /** false until the server has answered at least once */
+  loaded: false,
   /** Map<day, Map<slotIdx, Set<userId>>> */
   marks: new Map(),
   /** Map<day, Set<slotIdx>> - the signed-in person's own marks */
@@ -270,11 +272,15 @@ async function load({ quiet = false } = {}) {
   try {
     const data = await api.fetchState({ from, to, signal: controller.signal });
     applyServerState(data, from, to);
+    state.loaded = true;
     state.lastSync = new Date();
     dom.syncState.textContent = `synced ${state.lastSync.toLocaleTimeString()}`;
+    setBanner(null);
   } catch (err) {
     if (err?.name === 'AbortError') return;
     dom.syncState.textContent = 'offline';
+    setBanner(connectionBanner(err.message || 'Unknown error.'));
+    updateSignInForm();
     if (!quiet) toast(err.message || 'Could not load data.', 'error');
   } finally {
     if (inflight === controller) {
@@ -681,9 +687,21 @@ function knownUser(name) {
 }
 
 function updateSignInForm() {
+  if ($('signInOverlay').hidden) return;
   const name = $('nameInput').value;
   const existing = knownUser(name);
   const info = $('signInInfo');
+
+  // Without a successful load we know nothing about seats - say so rather than
+  // guessing, which used to surface as a bogus "board is full".
+  if (!state.loaded) {
+    $('passwordField').hidden = true;
+    $('colorField').hidden = true;
+    $('signInSubmit').disabled = true;
+    info.hidden = false;
+    info.textContent = `Can't reach the server (${apiLabel()}), so the roster is unknown. Fix the connection and reload.`;
+    return;
+  }
 
   $('knownNames').replaceChildren(
     ...state.users.map((u) => {
@@ -872,19 +890,51 @@ function restorePrefs() {
   jump.max = lastDayOfRange();
 }
 
-function showApiBanner() {
-  if (!api.needsRemoteApi) return;
-  const banner = el('div', 'alert');
-  banner.style.margin = '10px 16px 0';
-  banner.textContent =
-    'No API configured. GitHub Pages can only serve the page — set apiBase in app.config.js ' +
-    'to your Vercel URL, or open this page with ?api=https://your-app.vercel.app';
-  document.querySelector('main').prepend(banner);
+/** Shows (or clears) a persistent banner above the grids. */
+function setBanner(node) {
+  const existing = $('banner');
+  if (existing) existing.remove();
+  if (!node) return;
+  node.id = 'banner';
+  node.className = 'alert';
+  node.style.margin = '0 0 12px';
+  document.querySelector('main').prepend(node);
+}
+
+function apiLabel() {
+  return api.apiBase || `${location.origin} (same origin)`;
+}
+
+function connectionBanner(message) {
+  const node = el('div');
+  node.append(el('strong', null, 'Cannot load the board. '), document.createTextNode(message));
+  node.append(el('div', null, `API: ${apiLabel()}`));
+  const link = el('a', null, 'Open the deployment health check →');
+  link.href = `${api.apiBase}/api/health`;
+  link.target = '_blank';
+  link.rel = 'noreferrer';
+  link.style.color = 'inherit';
+  const row = el('div');
+  row.appendChild(link);
+  node.append(row);
+  return node;
+}
+
+function noApiBanner() {
+  const node = el('div');
+  node.append(
+    el('strong', null, 'No API configured. '),
+    document.createTextNode(
+      'GitHub Pages only serves the page — the database lives on Vercel. Set apiBase in ' +
+        'app.config.js to your Vercel URL, or open this page with ?api=https://your-app.vercel.app',
+    ),
+  );
+  return node;
 }
 
 function boot() {
   restorePrefs();
-  showApiBanner();
+  if (api.needsRemoteApi) setBanner(noApiBanner());
 
   const today = todayKey();
   setWinStart(addDays(today, -Math.floor(effectiveLen() / 2)));

@@ -28,7 +28,12 @@ export function db() {
   const url = process.env.TURSO_DATABASE_URL || process.env.DB_URI;
   const authToken = process.env.TURSO_AUTH_TOKEN || process.env.DB_TOKEN;
   if (!url) {
-    throw new HttpError(500, 'Database is not configured (set DB_URI / TURSO_DATABASE_URL).');
+    throw new HttpError(
+      503,
+      'Database is not configured on this deployment. Set the DB_URI and DB_TOKEN ' +
+        'environment variables (TURSO_DATABASE_URL / TURSO_AUTH_TOKEN also work), then redeploy.',
+      { misconfigured: true },
+    );
   }
   client = createClient({ url, authToken });
   return client;
@@ -124,8 +129,12 @@ export async function readBody(req) {
   }
 }
 
-/** Wraps a handler with CORS, schema bootstrap and uniform error responses. */
-export function handler(fn) {
+/**
+ * Wraps a handler with CORS, schema bootstrap and uniform error responses.
+ * Pass `{ schema: false }` for routes that must run even when the database is
+ * unreachable (the health check).
+ */
+export function handler(fn, { schema = true } = {}) {
   return async (req, res) => {
     cors(req, res);
     if (req.method === 'OPTIONS') {
@@ -133,17 +142,33 @@ export function handler(fn) {
       return;
     }
     try {
-      await ensureSchema();
+      if (schema) await ensureSchema();
       await fn(req, res);
     } catch (err) {
-      const status = err instanceof HttpError ? err.status : 500;
-      if (status >= 500) console.error(err);
-      res.status(status).json({
-        error: status >= 500 ? 'Server error.' : err.message,
-        ...(err instanceof HttpError ? err.extra : {}),
+      // HttpErrors are ones we raised on purpose, so their message is safe and
+      // useful. Anything else is a surprise and gets a generic reply.
+      if (err instanceof HttpError) {
+        if (err.status >= 500) console.error(err);
+        res.status(err.status).json({ error: err.message, ...err.extra });
+        return;
+      }
+      console.error(err);
+      res.status(500).json({
+        error: 'Server error. Check the deployment logs.',
+        hint: describeDbFailure(err),
       });
     }
   };
+}
+
+/** Turns common libSQL connection failures into something actionable. */
+export function describeDbFailure(err) {
+  const text = String(err?.code || '') + ' ' + String(err?.message || err || '');
+  if (/UNAUTHORIZED|401|token/i.test(text)) return 'The database rejected the token - check DB_TOKEN.';
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|ECONNREFUSED|fetch failed/i.test(text)) {
+    return 'The database host could not be reached - check DB_URI.';
+  }
+  return undefined;
 }
 
 /* -------------------------------------------------------------- passwords */
