@@ -1,1 +1,8 @@
 .env
+.env.*
+!.env.example
+node_modules/
+.vercel
+_site/
+.DS_Store
+Thumbs.db

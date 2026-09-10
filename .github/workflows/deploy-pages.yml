@@ -1,0 +1,65 @@
+name: Deploy to GitHub Pages
+
+# GitHub Pages can only serve static files, so it publishes the front end and
+# points it at the API hosted on Vercel. Set a repository *variable* named
+# API_BASE (Settings -> Secrets and variables -> Actions -> Variables) to your
+# Vercel URL, e.g. https://rehearsals.vercel.app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble static site
+        env:
+          API_BASE: ${{ vars.API_BASE }}
+        run: |
+          mkdir -p _site/js
+          cp index.html styles.css app.config.js _site/
+          cp js/*.js _site/js/
+          touch _site/.nojekyll
+          node - <<'EOF'
+          const fs = require('fs');
+          const base = (process.env.API_BASE || '').replace(/\/+$/, '');
+          if (!base) {
+            console.log('::warning::API_BASE variable is not set - the Pages build will have no backend.');
+            process.exit(0);
+          }
+          const file = '_site/index.html';
+          const html = fs.readFileSync(file, 'utf8').replace(
+            '<script type="module" src="js/app.js"></script>',
+            `<script>window.RH_API_BASE=${JSON.stringify(base)};</script>\n<script type="module" src="js/app.js"></script>`,
+          );
+          fs.writeFileSync(file, html);
+          console.log('Injected API base:', base);
+          EOF
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

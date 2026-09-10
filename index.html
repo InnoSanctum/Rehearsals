@@ -1,60 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>When2Meet Clone</title>
-    <link rel="stylesheet" href="styles.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Rehearsals — shared availability</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🗓️</text></svg>">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>📅 Availability Scheduler</h1>
-            <div class="user-info">
-                <label for="username">Your Name:</label>
-                <input type="text" id="username" placeholder="Enter your name">
-                <button id="loginBtn">Enter</button>
-                <span id="welcomeMsg"></span>
-            </div>
-        </header>
 
-        <div class="main-content">
-            <!-- Personal Calendar -->
-            <section class="calendar-section">
-                <h2>Your Availability</h2>
-                <div class="calendar-controls">
-                    <button id="prevWeek">◀ Previous Week</button>
-                    <span id="currentWeekLabel"></span>
-                    <button id="nextWeek">Next Week ▶</button>
-                    <button id="todayBtn">Today</button>
-                </div>
-                <div class="calendar-wrapper">
-                    <div id="personalCalendar" class="calendar-grid"></div>
-                </div>
-                <div class="instructions">
-                    <p><strong>Instructions:</strong> Click and drag to mark/unmark your availability. Select your color from the options above.</p>
-                </div>
-            </section>
+<header class="topbar">
+  <div class="brand">🗓️ Rehearsals<small id="rangeNote">availability board</small></div>
+  <div class="roster" id="roster"></div>
+  <div class="spacer"></div>
+  <span class="seats" id="seats"></span>
+  <span class="seats" id="syncState"></span>
+  <button id="accountBtn" hidden>Account</button>
+  <button id="signInBtn" class="primary">Sign in</button>
+</header>
 
-            <!-- Aggregate View -->
-            <section class="aggregate-section">
-                <h2>Combined Availability</h2>
-                <div class="calendar-controls">
-                    <span id="aggregateWeekLabel"></span>
-                </div>
-                <div class="calendar-wrapper">
-                    <div id="aggregateCalendar" class="calendar-grid"></div>
-                </div>
-                <div class="legend">
-                    <span class="legend-item"><span class="color-box empty"></span> 0</span>
-                    <span class="legend-item"><span class="color-box low"></span> 1-2</span>
-                    <span class="legend-item"><span class="color-box medium"></span> 3-4</span>
-                    <span class="legend-item"><span class="color-box high"></span> 5+</span>
-                </div>
-            </section>
-        </div>
+<nav class="toolbar">
+  <div class="group">
+    <button data-nav="-28" title="Back 4 weeks">«</button>
+    <button data-nav="-7" title="Back 1 week">‹</button>
+    <button id="todayBtn">Today</button>
+    <button data-nav="7" title="Forward 1 week">›</button>
+    <button data-nav="28" title="Forward 4 weeks">»</button>
+  </div>
+  <label>Jump to <input type="date" id="jumpDate"></label>
+  <label>Days
+    <select id="windowLen">
+      <option value="14">14</option>
+      <option value="21">21</option>
+      <option value="28" selected>28</option>
+      <option value="42">42</option>
+      <option value="56">56</option>
+    </select>
+  </label>
+  <label>Layout
+    <select id="layoutSel">
+      <option value="split">Side by side</option>
+      <option value="stacked">Stacked</option>
+    </select>
+  </label>
+  <div class="spacer"></div>
+  <span id="rangeLabel"></span>
+</nav>
+
+<main>
+  <div class="panels split" id="panels">
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Your availability</h2>
+        <span class="hint" id="mineHint">Sign in to start marking</span>
+        <span class="spacer"></span>
+        <button id="clearAllBtn" class="ghost" hidden>Clear all mine</button>
+      </div>
+      <div class="grid-scroll" id="scroll-mine">
+        <div class="grid" id="grid-mine"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Combined</h2>
+        <span class="hint">Number of people free · hover for names</span>
+        <span class="spacer"></span>
+        <span class="legend" id="legend"></span>
+      </div>
+      <div class="grid-scroll" id="scroll-all">
+        <div class="grid" id="grid-all"></div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- ------------------------------------------------------------ sign in -->
+<div class="overlay" id="signInOverlay" hidden>
+  <form class="card" id="signInForm">
+    <h2>Who are you?</h2>
+    <p class="sub" id="signInSub">Enter your name. Returning? Use the same name to get your table back.</p>
+
+    <div class="alert" id="signInError" hidden></div>
+    <div class="alert info" id="signInInfo" hidden></div>
+
+    <div class="field">
+      <label for="nameInput">Name</label>
+      <input type="text" id="nameInput" list="knownNames" autocomplete="off" autocapitalize="words"
+             spellcheck="false" maxlength="40" placeholder="e.g. Alex" required>
+      <datalist id="knownNames"></datalist>
     </div>
 
-    <script src="app.js"></script>
+    <div class="field" id="passwordField" hidden>
+      <label for="passwordInput">Password</label>
+      <input type="password" id="passwordInput" autocomplete="current-password" maxlength="200">
+      <div class="help" id="passwordHelp">Optional — leave blank if you don't want one.</div>
+    </div>
+
+    <div class="field" id="colorField" hidden>
+      <label>Your colour</label>
+      <div class="swatches" id="colorSwatches"></div>
+      <div class="help">Colours already taken by others are disabled.</div>
+    </div>
+
+    <div class="row">
+      <button type="button" class="ghost" id="signInCancel">Cancel</button>
+      <div class="spacer"></div>
+      <button type="submit" class="primary" id="signInSubmit">Enter</button>
+    </div>
+  </form>
+</div>
+
+<!-- ------------------------------------------------------------ account -->
+<div class="overlay" id="accountOverlay" hidden>
+  <div class="card">
+    <h2 id="accountName">Account</h2>
+    <p class="sub">Change your colour, set a password, or sign out.</p>
+
+    <div class="alert" id="accountError" hidden></div>
+    <div class="alert info" id="accountInfo" hidden></div>
+
+    <div class="field">
+      <label>Colour</label>
+      <div class="swatches" id="accountSwatches"></div>
+    </div>
+
+    <form id="passwordForm">
+      <div class="field" id="currentPwField" hidden>
+        <label for="currentPw">Current password</label>
+        <input type="password" id="currentPw" autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label for="newPw">New password</label>
+        <input type="password" id="newPw" autocomplete="new-password" placeholder="min 4 characters">
+        <div class="help">Leave blank and press <em>Remove password</em> to make the name open again.</div>
+      </div>
+      <div class="row">
+        <button type="submit" class="primary">Save password</button>
+        <button type="button" id="removePwBtn">Remove password</button>
+      </div>
+    </form>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+    <div class="row">
+      <button type="button" id="signOutBtn">Sign out</button>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" id="accountClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script type="module" src="js/app.js"></script>
 </body>
 </html>

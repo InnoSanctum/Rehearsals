@@ -1,0 +1,22 @@
+{
+  "name": "rehearsals-availability",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared availability scheduler (When2Meet-style) backed by Turso/libSQL.",
+  "scripts": {
+    "dev": "node scripts/dev-server.js",
+    "dev:vercel": "vercel dev",
+    "db:init": "node scripts/init-db.js",
+    "db:reset": "node scripts/init-db.js --reset"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.15.7"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
