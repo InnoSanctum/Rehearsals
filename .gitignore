@@ -1,0 +1,1 @@
+Nothing should be ignored in this case, as the changes only include source files (.js, .html, .css) and a text file that was deleted. No build artifacts, dependencies, or temporary files are present in the changes.
