@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>When2Meet Clone</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📅 Availability Scheduler</h1>
+            <div class="user-info">
+                <label for="username">Your Name:</label>
+                <input type="text" id="username" placeholder="Enter your name">
+                <button id="loginBtn">Enter</button>
+                <span id="welcomeMsg"></span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Personal Calendar -->
+            <section class="calendar-section">
+                <h2>Your Availability</h2>
+                <div class="calendar-controls">
+                    <button id="prevWeek">◀ Previous Week</button>
+                    <span id="currentWeekLabel"></span>
+                    <button id="nextWeek">Next Week ▶</button>
+                    <button id="todayBtn">Today</button>
+                </div>
+                <div class="calendar-wrapper">
+                    <div id="personalCalendar" class="calendar-grid"></div>
+                </div>
+                <div class="instructions">
+                    <p><strong>Instructions:</strong> Click and drag to mark/unmark your availability. Select your color from the options above.</p>
+                </div>
+            </section>
+
+            <!-- Aggregate View -->
+            <section class="aggregate-section">
+                <h2>Combined Availability</h2>
+                <div class="calendar-controls">
+                    <span id="aggregateWeekLabel"></span>
+                </div>
+                <div class="calendar-wrapper">
+                    <div id="aggregateCalendar" class="calendar-grid"></div>
+                </div>
+                <div class="legend">
+                    <span class="legend-item"><span class="color-box empty"></span> 0</span>
+                    <span class="legend-item"><span class="color-box low"></span> 1-2</span>
+                    <span class="legend-item"><span class="color-box medium"></span> 3-4</span>
+                    <span class="legend-item"><span class="color-box high"></span> 5+</span>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
