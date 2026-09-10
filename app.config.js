@@ -31,7 +31,7 @@ export const APP_CONFIG = {
    *   'https://xxx.vercel.app'    -> required for GitHub Pages, which is static-only
    * Can be overridden at runtime with ?api=<url> or localStorage['rh.apiBase'].
    */
-  apiBase: '',
+  apiBase: 'https://https://rehearsals-cyan.vercel.app',
 
   /**
    * Colours offered to participants. Deliberately contains no greens (green is
