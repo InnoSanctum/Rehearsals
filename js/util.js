@@ -59,6 +59,21 @@ export function dayNum(day) {
   return utc(day).getUTCDate();
 }
 
+/** Monday of the week containing `day` (weeks run Monday..Sunday). */
+export function mondayOf(day) {
+  return addDays(day, -((weekday(day) + 6) % 7));
+}
+
+/** '7–13 Sep', or '31 Aug–6 Sep' when the week crosses a month. */
+export function weekLabel(monday) {
+  const a = utc(monday);
+  const b = utc(addDays(monday, 6));
+  const mon = (d) => MONTHS[d.getUTCMonth()].slice(0, 3);
+  return a.getUTCMonth() === b.getUTCMonth()
+    ? `${a.getUTCDate()}–${b.getUTCDate()} ${mon(b)}`
+    : `${a.getUTCDate()} ${mon(a)}–${b.getUTCDate()} ${mon(b)}`;
+}
+
 /** '9 Sep 2026' */
 export function prettyDay(day) {
   const d = utc(day);

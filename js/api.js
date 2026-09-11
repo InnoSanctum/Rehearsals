@@ -128,6 +128,11 @@ export function writeSlots({ mode, days, startIdx, endIdx }) {
   return request('slots', { method: 'POST', body: { mode, days, startIdx, endIdx } });
 }
 
+/** Makes the week after `week` a copy of it. `dryRun` only reports what would change. */
+export function copyWeek(week, { dryRun = false } = {}) {
+  return request('slots', { method: 'POST', body: { mode: 'copy-week', week, dryRun } });
+}
+
 export function clearAllSlots() {
   return request('slots', { method: 'POST', body: { mode: 'clear-all' } });
 }

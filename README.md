@@ -90,6 +90,7 @@ rangeStart: '2026-09-01',    // inclusive
 rangeEnd: '2028-09-01',      // exclusive
 slotMinutes: 30,
 greenThreshold: 5,           // people needed to turn a slot grass green
+hideBeforeHour: 9,           // what the "Hide 00:00–09:00" checkbox hides
 apiBase: '',                 // '' = same origin
 palette: [...]               // colours offered to participants
 ```
@@ -120,6 +121,8 @@ DELETE FROM users WHERE name_key = 'alex';
 | Toggle one slot          | Click it (tap on touch devices)                            |
 | Move through time        | Scroll sideways, use `«  ‹  ›  »`, or ← / → (Shift = month)|
 | Jump                     | *Jump to* date picker, *Today* button or the `T` key       |
+| Repeat a week            | Click a cell or day header in that week, then *Copy … → …* |
+| Hide the early hours     | *Hide 00:00–09:00* checkbox in the toolbar                 |
 | Change colour / password | *Account* button, top right                                |
 | Start over               | *Clear all mine*                                           |
 
@@ -129,6 +132,26 @@ held in the DOM, which is what keeps a 730-day range responsive.
 
 Both grids scroll together. *Layout* switches between side-by-side and stacked;
 stacked shows roughly twice as many days at once.
+
+### Copying a week
+
+The last cell you clicked, dragged over or tapped picks a week (Monday to
+Sunday); clicking a day header, or any cell in the *Combined* grid, picks one
+without changing anything. That week gets a solid underline, the week after it a
+dashed one, and the button names both, e.g. *Copy 7–13 Sep → 14–20 Sep*. Before
+you pick anything it uses the current week.
+
+Copying makes the following week an **exact copy**: slots missing there are
+added, and slots marked there that aren't in the picked week are removed. If
+anything would be removed you're asked first, with the count; otherwise it just
+happens. It copies every slot, including ones the early-hours filter is hiding,
+and only ever touches your own marks. Days that would land outside the schedule
+range are skipped.
+
+### Hiding the early hours
+
+*Hide 00:00–09:00* is display only — the rows are hidden, not cleared, and the
+setting is remembered per browser. The cut-off comes from `hideBeforeHour`.
 
 ### Sign-in rules
 
@@ -163,7 +186,7 @@ One row per marked slot. `api/state` collapses them into
 |-----------------------------|--------------------------------------------------------|
 | `GET  /api/state?from&to`   | settings, roster, free colours, you, marks for a range  |
 | `POST /api/auth`            | `enter` · `logout` · `set-color` · `set-password`       |
-| `POST /api/slots`           | `{mode:'add'\|'remove', days[], startIdx, endIdx}` or `{mode:'clear-all'}` |
+| `POST /api/slots`           | `{mode:'add'\|'remove', days[], startIdx, endIdx}`, `{mode:'copy-week', week, dryRun?}` or `{mode:'clear-all'}` |
 
 Writes need `Authorization: Bearer <token>` from `enter`.
 

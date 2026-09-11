@@ -27,15 +27,35 @@ function buildScale(threshold) {
  * keeps the sliding horizontal scroll cheap.
  */
 export class Grid {
-  constructor(gridEl, { kind, slotsPerDay, slotMinutes }) {
+  constructor(gridEl, { kind, slotsPerDay, slotMinutes, nightSlots = 0 }) {
     this.root = gridEl;
     this.kind = kind;
     this.slotsPerDay = slotsPerDay;
     this.slotMinutes = slotMinutes;
     this.perHour = Math.max(1, Math.round(60 / slotMinutes));
+    this.nightSlots = nightSlots;
     this.days = [];
     this.cells = [];
+    this.heads = [];
     this.root.style.setProperty('--rows', String(slotsPerDay));
+  }
+
+  /**
+   * Hides the first `nightSlots` rows. Purely visual: hidden rows keep their
+   * cells, so indexing, painting and saved data are untouched. Removing whole
+   * rows lets the remaining ones flow up while columns stay aligned.
+   */
+  setNightHidden(hidden) {
+    this.root.classList.toggle('hide-night', hidden);
+    this.root.style.setProperty('--rows', String(this.slotsPerDay - (hidden ? this.nightSlots : 0)));
+  }
+
+  /** Underlines the picked week's day headers, and marks where it would be copied. */
+  markWeek(source, target) {
+    for (const head of this.heads) {
+      head.classList.toggle('picked', source.has(head._day));
+      head.classList.toggle('pick-target', target.has(head._day));
+    }
   }
 
   get dayCount() {
@@ -50,6 +70,7 @@ export class Grid {
   render(days, { today, nowIdx } = {}) {
     this.days = days.slice();
     this.cells = new Array(days.length * this.slotsPerDay);
+    this.heads = [];
     this.root.style.gridTemplateColumns = `var(--time-w) repeat(${days.length}, var(--col-w))`;
 
     const frag = document.createDocumentFragment();
@@ -81,17 +102,23 @@ export class Grid {
       if (day === today) head.classList.add('today');
       head.append(el('span', null, weekdayName(day)), el('b', null, String(dayNum(day))));
       head.title = day;
+      head._day = day;
+      this.heads.push(head);
       frag.appendChild(head);
     }
 
     // --- body --------------------------------------------------------------
     for (let idx = 0; idx < this.slotsPerDay; idx += 1) {
       const onHour = idx % this.perHour === 0;
-      frag.appendChild(el('div', `time-label${onHour ? ' hour' : ''}`, slotTime(idx, this.slotMinutes)));
+      const night = idx < this.nightSlots;
+      const label = el('div', `time-label${onHour ? ' hour' : ''}`, slotTime(idx, this.slotMinutes));
+      if (night) label.classList.add('night');
+      frag.appendChild(label);
 
       for (let di = 0; di < days.length; di += 1) {
         const day = days[di];
         const cell = el('div', 'cell');
+        if (night) cell.classList.add('night');
         if (onHour) cell.classList.add('hour-start');
         if (isWeekend(day)) cell.classList.add('weekend');
         if (day === today) {

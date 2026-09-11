@@ -10,10 +10,12 @@ import {
   debounce,
   diffDays,
   el,
+  mondayOf,
   prettyDay,
   slotTime,
   todayKey,
   toast,
+  weekLabel,
 } from './util.js';
 
 /* ================================================================= state == */
@@ -21,6 +23,15 @@ import {
 const SHIFT_DAYS = 7;      // how far the window slides when you reach an edge
 const POLL_MS = 20000;     // background refresh while the tab is visible
 const PREFETCH_DAYS = 7;   // extra days fetched on each side of the window
+
+/** Rows hidden by the "hide early hours" checkbox (00:00 up to hideBeforeHour). */
+const NIGHT_SLOTS = Math.max(
+  0,
+  Math.min(
+    Math.round(1440 / APP_CONFIG.slotMinutes),
+    Math.round(((APP_CONFIG.hideBeforeHour ?? 0) * 60) / APP_CONFIG.slotMinutes),
+  ),
+);
 
 const state = {
   cfg: {
@@ -47,6 +58,9 @@ const state = {
   winStart: APP_CONFIG.rangeStart,
   winLen: 28,
   lastSync: null,
+  /** The most recently clicked day; its Mon..Sun week is what "Copy week" copies. */
+  pickedDay: null,
+  hideNight: false,
 };
 
 const lastDayOfRange = () => addDays(state.cfg.rangeEnd, -1);
@@ -70,11 +84,13 @@ const gridMine = new Grid($('grid-mine'), {
   kind: 'mine',
   slotsPerDay: state.cfg.slotsPerDay,
   slotMinutes: state.cfg.slotMinutes,
+  nightSlots: NIGHT_SLOTS,
 });
 const gridAll = new Grid($('grid-all'), {
   kind: 'all',
   slotsPerDay: state.cfg.slotsPerDay,
   slotMinutes: state.cfg.slotMinutes,
+  nightSlots: NIGHT_SLOTS,
 });
 
 /* ========================================================== marks helpers = */
@@ -156,6 +172,7 @@ function renderWindow() {
   gridMine.render(days, opts);
   gridAll.render(days, opts);
   repaint();
+  paintPickedWeek();
   updateRangeLabel(days);
   scheduleLoad();
 }
@@ -249,7 +266,7 @@ let inflight = null;
 let inflightKey = '';
 let pendingWrites = 0;
 
-async function load({ quiet = false } = {}) {
+async function load({ quiet = false, force = false } = {}) {
   const days = gridMine.days;
   if (!days.length) return;
   const from = clampDay(addDays(days[0], -PREFETCH_DAYS), state.cfg.rangeStart, lastDayOfRange());
@@ -259,9 +276,10 @@ async function load({ quiet = false } = {}) {
     state.cfg.rangeEnd,
   );
 
-  // A request for exactly this range is already running - don't duplicate it.
+  // A request for exactly this range is already running - don't duplicate it,
+  // unless the caller just wrote data that request may predate.
   const key = `${from}|${to}`;
-  if (inflight && inflightKey === key) return;
+  if (!force && inflight && inflightKey === key) return;
 
   inflight?.abort();
   const controller = new AbortController();
@@ -355,6 +373,9 @@ function renderChrome() {
   $('signInBtn').hidden = signedIn;
   $('accountBtn').hidden = !signedIn;
   $('clearAllBtn').hidden = !signedIn;
+  $('copyWeekBtn').hidden = !signedIn;
+  document.body.classList.toggle('signed-in', signedIn);
+  paintPickedWeek();
   if (signedIn) {
     $('accountBtn').textContent = state.me.name;
     document.documentElement.style.setProperty('--me-color', state.me.color);
@@ -362,6 +383,7 @@ function renderChrome() {
   } else {
     dom.mineHint.textContent = 'Sign in to start marking';
   }
+  dom.mineHint.title = dom.mineHint.textContent; // the hint truncates when space is tight
   gridMine.root.classList.toggle('locked', !signedIn);
 
   // legend
@@ -454,8 +476,10 @@ async function commitDrag() {
   if (!drag) return;
   const rect = rectOf(drag);
   const mode = drag.mode;
+  const lastDay = drag.curDay;
   clearPreview();
   drag = null;
+  pickDay(lastDay); // the last cell touched decides which week "Copy week" copies
   if (!rect || !state.me) return;
 
   const days = gridMine.days.slice(rect.d0, rect.d1 + 1);
@@ -589,6 +613,142 @@ function stopAutoScroll() {
   if (autoScrollRaf) cancelAnimationFrame(autoScrollRaf);
   autoScrollRaf = 0;
 }
+
+/* ============================================================ copy week === */
+
+const NO_DAYS = new Set();
+let copying = false;
+
+function inRange(day) {
+  return day >= state.cfg.rangeStart && day < state.cfg.rangeEnd;
+}
+
+/** The picked Mon..Sun week, the week after it, and how many of its days can be copied. */
+function pickedWeek() {
+  const anchor = clampDay(state.pickedDay || todayKey(), state.cfg.rangeStart, lastDayOfRange());
+  const source = mondayOf(anchor);
+  const target = addDays(source, 7);
+  const sourceDays = new Set();
+  const targetDays = new Set();
+  let copyable = 0;
+  for (let i = 0; i < 7; i += 1) {
+    const from = addDays(source, i);
+    const to = addDays(source, i + 7);
+    sourceDays.add(from);
+    targetDays.add(to);
+    if (inRange(from) && inRange(to)) copyable += 1;
+  }
+  return { source, target, sourceDays, targetDays, copyable };
+}
+
+function pickDay(day) {
+  if (!day || day === state.pickedDay) return;
+  state.pickedDay = day;
+  paintPickedWeek();
+}
+
+function paintPickedWeek() {
+  const button = $('copyWeekBtn');
+  if (!state.me) {
+    gridMine.markWeek(NO_DAYS, NO_DAYS);
+    gridAll.markWeek(NO_DAYS, NO_DAYS);
+    return;
+  }
+  const { source, target, sourceDays, targetDays, copyable } = pickedWeek();
+  gridMine.markWeek(sourceDays, targetDays);
+  gridAll.markWeek(sourceDays, targetDays);
+  button.textContent = copying ? 'Copying…' : `Copy ${weekLabel(source)} → ${weekLabel(target)}`;
+  button.disabled = copying || !copyable;
+  button.title = copyable
+    ? `Makes ${weekLabel(target)} an exact copy of your ${weekLabel(source)} (Mon–Sun), ` +
+      'including hours hidden by the filter. Click any cell or day header to pick a different week.'
+    : 'The following week is outside the schedule, so there is nowhere to copy to.';
+}
+
+async function copyPickedWeek() {
+  if (!state.me) {
+    openSignIn();
+    return;
+  }
+  const { source, target, copyable } = pickedWeek();
+  if (!copyable || copying) return;
+  const from = weekLabel(source);
+  const to = weekLabel(target);
+  const plural = (n) => (n === 1 ? '' : 's');
+
+  copying = true;
+  pendingWrites += 1; // keep background polls from racing the write
+  paintPickedWeek();
+  try {
+    // Ask the server what would change first, so we only interrupt when
+    // something already marked next week is about to be removed.
+    const plan = await api.copyWeek(source, { dryRun: true });
+    if (!plan.added && !plan.removed) {
+      toast(plan.sourceSlots ? `${to} already matches ${from}.` : `Nothing is marked in ${from} or ${to}.`);
+      return;
+    }
+    if (plan.removed) {
+      const verb = plan.removed === 1 ? 'is not' : 'are not';
+      const question = plan.sourceSlots
+        ? `Copy ${from} onto ${to}?\n\n${plan.removed} slot${plural(plan.removed)} you marked in ${to} ` +
+          `${verb} in ${from} and will be removed.`
+        : `Nothing is marked in ${from}.\n\nCopying it will clear the ${plan.removed} ` +
+          `slot${plural(plan.removed)} you marked in ${to}. Continue?`;
+      if (!confirm(question)) return;
+    }
+
+    const done = await api.copyWeek(source);
+    const changes = [];
+    if (done.added) changes.push(`${done.added} added`);
+    if (done.removed) changes.push(`${done.removed} removed`);
+    toast(`Copied ${from} → ${to}${changes.length ? ` (${changes.join(', ')})` : ''}.`);
+  } catch (err) {
+    toast(err.message || 'Could not copy the week.', 'error');
+  } finally {
+    copying = false;
+    pendingWrites -= 1;
+    paintPickedWeek();
+    await load({ quiet: true, force: true });
+  }
+}
+
+$('copyWeekBtn').addEventListener('click', copyPickedWeek);
+
+// Day headers in either grid, and cells in the read-only combined grid, pick a
+// week without changing anything. Cells in your own grid pick one via commitDrag.
+for (const grid of [gridMine, gridAll]) {
+  grid.root.addEventListener('click', (event) => {
+    const target = event.target.closest?.(grid === gridAll ? '.day-head, .cell' : '.day-head');
+    if (target && grid.root.contains(target)) pickDay(target._day);
+  });
+}
+
+/* ========================================================== early hours === */
+
+function topVisibleSlot() {
+  const rowH = cssPx('--row-h') || 22;
+  return Math.round(dom.scrollMine.scrollTop / rowH) + (state.hideNight ? NIGHT_SLOTS : 0);
+}
+
+function scrollToSlot(slot) {
+  const rowH = cssPx('--row-h') || 22;
+  dom.scrollMine.scrollTop = Math.max(0, slot - (state.hideNight ? NIGHT_SLOTS : 0)) * rowH;
+  mirrorScroll(dom.scrollMine);
+}
+
+/** Shows or hides the early rows while keeping the same time at the top of the view. */
+function setNightHidden(hidden) {
+  const top = topVisibleSlot();
+  state.hideNight = hidden;
+  gridMine.setNightHidden(hidden);
+  gridAll.setNightHidden(hidden);
+  scrollToSlot(top);
+}
+
+$('hideNight').addEventListener('change', (event) => {
+  setNightHidden(event.target.checked);
+  localStorage.setItem('rh.hideNight', event.target.checked ? '1' : '0');
+});
 
 /* ============================================================== toolbar === */
 
@@ -888,6 +1048,17 @@ function restorePrefs() {
   const jump = $('jumpDate');
   jump.min = state.cfg.rangeStart;
   jump.max = lastDayOfRange();
+
+  if (NIGHT_SLOTS > 0) {
+    $('hideNightLabel').textContent = `Hide 00:00–${slotTime(NIGHT_SLOTS, state.cfg.slotMinutes)}`;
+    const hide = localStorage.getItem('rh.hideNight') === '1';
+    $('hideNight').checked = hide;
+    state.hideNight = hide;
+    gridMine.setNightHidden(hide);
+    gridAll.setNightHidden(hide);
+  } else {
+    $('hideNight').closest('label').hidden = true;
+  }
 }
 
 /** Shows (or clears) a persistent banner above the grids. */
@@ -941,11 +1112,10 @@ function boot() {
   renderWindow();
   renderChrome();
 
-  // Land on today, a little after midnight rows so 08:00 is in view.
+  // Land on today, scrolled so 08:00 is in view (or the first row, when the
+  // early hours are hidden).
   focusDay(today);
-  const rowH = cssPx('--row-h') || 22;
-  dom.scrollMine.scrollTop = 15 * rowH;
-  mirrorScroll(dom.scrollMine);
+  scrollToSlot(15);
 
   load();
 

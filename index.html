@@ -44,6 +44,7 @@
       <option value="stacked">Stacked</option>
     </select>
   </label>
+  <label class="check"><input type="checkbox" id="hideNight"> <span id="hideNightLabel">Hide 00:00–09:00</span></label>
   <div class="spacer"></div>
   <span id="rangeLabel"></span>
 </nav>
@@ -56,6 +57,7 @@
         <h2>Your availability</h2>
         <span class="hint" id="mineHint">Sign in to start marking</span>
         <span class="spacer"></span>
+        <button id="copyWeekBtn" hidden>Copy week →</button>
         <button id="clearAllBtn" class="ghost" hidden>Clear all mine</button>
       </div>
       <div class="grid-scroll" id="scroll-mine">

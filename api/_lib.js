@@ -224,6 +224,23 @@ export async function requireUser(req) {
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+export function addDaysKey(day, n) {
+  const d = new Date(day + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Monday of the week containing `day` (weeks run Monday..Sunday). */
+export function mondayOf(day) {
+  const weekday = new Date(day + 'T00:00:00Z').getUTCDay(); // 0 = Sunday
+  return addDaysKey(day, -((weekday + 6) % 7));
+}
+
+export function isInRange(day) {
+  const { rangeStart, rangeEnd } = settings();
+  return day >= rangeStart && day < rangeEnd;
+}
+
 export function isDay(value) {
   return (
     typeof value === 'string' &&

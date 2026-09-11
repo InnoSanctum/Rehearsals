@@ -25,6 +25,9 @@ export const APP_CONFIG = {
   /** Number of people that turns a combined slot "grass green". */
   greenThreshold: 5,
 
+  /** The "hide early hours" checkbox hides every slot before this hour. */
+  hideBeforeHour: 9,
+
   /**
    * Where the API lives.
    *   ''                          -> same origin (Vercel deployment)

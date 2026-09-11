@@ -123,6 +123,8 @@ input:focus-visible, select:focus-visible, button:focus-visible {
 .toolbar .group { display: flex; align-items: center; gap: 6px; }
 .toolbar .spacer { flex: 1 1 auto; }
 .toolbar label { font-size: 12px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 5px; }
+.toolbar label.check { cursor: pointer; user-select: none; }
+.toolbar label.check input { margin: 0; accent-color: var(--accent); }
 #rangeLabel { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ============================================================== panels === */
@@ -146,14 +148,28 @@ main { padding: 14px 16px 24px; }
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  min-height: 45px;
+  min-height: 48px; /* room for a button, so both headers match */
   padding: 7px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-2);
 }
-.panel-head h2 { margin: 0; font-size: 14px; }
-.panel-head .hint { font-size: 12px; color: var(--ink-soft); }
+.panel-head h2 { margin: 0; font-size: 14px; white-space: nowrap; }
+.panel-head .hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .panel-head .spacer { flex: 1 1 auto; }
+.panel-head button { white-space: nowrap; flex: none; }
+
+/* Side by side, both headers must stay one line tall or the two grids stop
+   lining up - the hint gives way (ellipsis) instead of the buttons wrapping. */
+@media (min-width: 1101px) {
+  .panels.split .panel-head { flex-wrap: nowrap; }
+}
 
 /* ================================================================ grid === */
 .grid-scroll {
@@ -243,6 +259,19 @@ main { padding: 14px 16px 24px; }
 .day-head.weekend { background: color-mix(in srgb, var(--surface-2) 82%, #f0a500 18%); }
 .day-head.today { background: var(--accent); color: #dce8ff; }
 .day-head.today b { color: #fff; }
+
+/* Week picked for "Copy week": solid bar under it, dashed bar under its destination. */
+body.signed-in .day-head { cursor: pointer; }
+.day-head.picked { box-shadow: inset 0 -4px 0 var(--ink); }
+.day-head.pick-target {
+  background-image: repeating-linear-gradient(90deg, var(--ink-soft) 0 6px, transparent 6px 10px);
+  background-size: 100% 4px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+}
+
+/* "Hide early hours": !important because #grid-all .cell sets display itself. */
+.grid.hide-night > .night { display: none !important; }
 
 .time-label {
   position: sticky;
